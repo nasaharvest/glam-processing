@@ -31,5 +31,21 @@ def list():
     click.echo(f"Supported product datasets: {SUPPORTED_DATASETS}")
 
 
+@cli.command()
+@click.argument("dataset-id", type=str)
+def info(dataset_id):
+    """Get info on supported products"""
+    from .download import Downloader, SUPPORTED_DATASETS, EARTHDATA_DATASETS
+
+    if dataset_id in SUPPORTED_DATASETS:
+        if dataset_id in EARTHDATA_DATASETS:
+            downloader = Downloader(dataset_id)
+            click.echo(downloader.info())
+        else:
+            click.echo(f"Summary information for {dataset_id} not available")
+    else:
+        click.echo(f"Dataset {dataset_id} not found in list of supported datasets")
+
+
 if __name__ == "__main__":
     cli()
