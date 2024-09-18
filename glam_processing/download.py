@@ -34,6 +34,8 @@ from .earthdata import (
     SUPPORTED_DATASETS as EARTHDATA_DATASETS,
 )
 
+from .utils import cloud_optimize
+
 from . import exceptions
 
 
@@ -82,25 +84,9 @@ class GlamDownloader:
         return SUPPORTED_INDICIES
 
     def _cloud_optimize(self, dataset, out_file, nodata=False):
-        raster = rasterio.open(dataset)
-        meta = raster.meta.copy()
+        optimized = cloud_optimize(dataset, out_file, nodata)
 
-        if nodata:
-            meta.update({"nodata": nodata})
-
-        out_meta = meta
-        cog_options = cog_profiles.get("deflate")
-        out_meta.update(cog_options)
-        out_meta.update({"BIGTIFF": "IF_SAFER"})
-        cog_translate(
-            raster,
-            out_file,
-            out_meta,
-            allow_intermediate_compression=True,
-            quiet=False,
-        )
-
-        return True
+        return optimized
 
     def _create_mosaic_cog_from_vrt(self, vrt_path):
         temp_path = vrt_path.replace("vrt", "temp.tif")
