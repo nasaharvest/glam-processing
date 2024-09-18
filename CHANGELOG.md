@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.0 (2024-09-18)
+
+### Feature
+
+* feat: add utility funtions in utils.py
+
+Add functions to create mean and median geotiffs from list of files. ([`69de3ad`](https://github.com/nasaharvest/glam-processing/commit/69de3add7a112a5c078c8a94192c55b46d4d1301))
+
 ## v0.2.0 (2024-09-04)
 
 ### Build
