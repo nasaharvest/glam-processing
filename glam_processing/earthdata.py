@@ -186,7 +186,7 @@ def apply_mask(in_array, source_dataset, nodata):
     # product-conditional behavior
 
     # MODIS pre-generated VI masking
-    if suffix in ["MOD13Q1", "MOD13Q4", "MOD13Q4N"]:
+    if suffix in ["MOD13Q1", "MOD13Q4", "MOD13Q4N", "MYD13Q1"]:
         if suffix[-1] == "1":
             pr_arr, pr_nodata = get_sds(
                 source_dataset, "250m 16 days pixel reliability"
