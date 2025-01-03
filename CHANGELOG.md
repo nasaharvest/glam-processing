@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.3.2 (2025-01-03)
+
+### Bug Fixes
+
+- Correct omission of MYD13Q1 from MODIS pre-generated VI masking
+  ([`c4baefc`](https://github.com/nasaharvest/glam-processing/commit/c4baefc1a810d371028436d248928071dfe29e33))
+
+
 ## v0.3.1 (2024-12-13)
 
 ### Bug Fixes
