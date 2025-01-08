@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.3.3 (2025-01-08)
+
+### Bug Fixes
+
+- Disable ssl verification in CLMSDownloader
+  ([`cf46cf2`](https://github.com/nasaharvest/glam-processing/commit/cf46cf237065ac93d5675324065521bd84462382))
+
+
 ## v0.3.2 (2025-01-03)
 
 ### Bug Fixes
