@@ -314,7 +314,7 @@ class CLMSDownloader(GlamDownloader):
 
     def query_composites(self, start_date, end_date):
 
-        r = requests.get(self.manifest)
+        r = requests.get(self.manifest, verify=False)
         download_list = r.text.split("\n")
 
         composites = []
@@ -346,7 +346,7 @@ class CLMSDownloader(GlamDownloader):
             date = composite.get("date")
             url = composite.get("url")
 
-            r = requests.get(url)
+            r = requests.get(url, verify=False)
 
             out = os.path.join(out_dir, f"{self.dataset}.{date}.tif")
 
