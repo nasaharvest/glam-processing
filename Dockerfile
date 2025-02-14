@@ -1,4 +1,3 @@
-# For more information, please refer to https://aka.ms/vscode-docker-python
 FROM python:3.11-slim
 
 # Keeps Python from generating .pyc files in the container
@@ -9,11 +8,11 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Copy project files
-COPY . /app/
-
 # Install GDAL and other geospatial libraries
 RUN apt-get update && apt-get install -y build-essential binutils libproj-dev gdal-bin libgdal-dev libsqlite3-mod-spatialite 
+
+# Copy project files
+COPY . .
 
 RUN python -m pip install poetry
 RUN poetry config virtualenvs.create false
