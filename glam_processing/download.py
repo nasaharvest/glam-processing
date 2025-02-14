@@ -154,8 +154,10 @@ class EarthDataDownloader(GlamDownloader):
     def auth(self, value):
         if not value.authenticated:
             try:
-                value.login()
+                # try to retreive credentials from environment first
+                value.login(strategy="environment")
             except:
+                # otherwise prompt for credentials
                 value.login(strategy="interactive", persist=True)
         self._auth = value
 
