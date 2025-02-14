@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.4.0 (2025-02-14)
+
+### Features
+
+- Add earthaccess authentication from environment variables as default strategy
+  ([`cf6ff70`](https://github.com/nasaharvest/glam-processing/commit/cf6ff70d75554c48e1af8dff0558cd1490f02ede))
+
+### Refactoring
+
+- Rearrange Dockerfile
+  ([`2b94c53`](https://github.com/nasaharvest/glam-processing/commit/2b94c53211a9bdcec3b72242078885328752ce13))
+
+- Rearrange Dockerfile commands
+  ([`59829fa`](https://github.com/nasaharvest/glam-processing/commit/59829fa026ed4853551db504c03937778cdc0312))
+
+
 ## v0.3.3 (2025-01-08)
 
 ### Bug Fixes
