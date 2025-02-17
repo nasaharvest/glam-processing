@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.4.1 (2025-02-17)
+
+### Bug Fixes
+
+- Add gdal cog driver option
+  ([`a2be38a`](https://github.com/nasaharvest/glam-processing/commit/a2be38a9dff35ae5bc825d477433f30a093e0694))
+
+
 ## v0.4.0 (2025-02-14)
 
 ### Features
