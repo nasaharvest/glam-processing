@@ -9,7 +9,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def cloud_optimize(dataset, out_file, nodata=False):
+def cloud_optimize(dataset, out_file, nodata=False, cog_driver=False):
     import rasterio
     from rio_cogeo.cogeo import cog_translate
     from rio_cogeo.cogeo import cog_validate
@@ -30,6 +30,7 @@ def cloud_optimize(dataset, out_file, nodata=False):
         out_file,
         out_meta,
         allow_intermediate_compression=True,
+        use_cog_driver=cog_driver,
         quiet=False,
     )
 

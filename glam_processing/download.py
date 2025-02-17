@@ -83,8 +83,8 @@ class GlamDownloader:
     def supported_indicies():
         return SUPPORTED_INDICIES
 
-    def _cloud_optimize(self, dataset, out_file, nodata=False):
-        optimized = cloud_optimize(dataset, out_file, nodata)
+    def _cloud_optimize(self, dataset, out_file, nodata=False, cog_driver=False):
+        optimized = cloud_optimize(dataset, out_file, nodata, cog_driver)
 
         return optimized
 
@@ -111,7 +111,7 @@ class GlamDownloader:
 
         log.info("Creating COG.")
 
-        optimized = self._cloud_optimize(temp_path, out_path)
+        optimized = self._cloud_optimize(temp_path, out_path, cog_driver=True)
         if optimized:
             os.remove(temp_path)
 
