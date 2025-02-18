@@ -111,7 +111,7 @@ class GlamDownloader:
 
         log.info("Creating COG.")
 
-        optimized = self._cloud_optimize(temp_path, out_path, cog_driver=True)
+        optimized = self._cloud_optimize(temp_path, out_path)
         if optimized:
             os.remove(temp_path)
 
@@ -175,8 +175,11 @@ class EarthDataDownloader(GlamDownloader):
     def query_granules(self, start_date, end_date):
         log.info("Querying available granules")
         concept_id = self.collection.concept_id()
-        query = DataGranules().concept_id(concept_id).temporal(start_date, end_date)
-        granules = query.get_all()
+        try:
+            query = DataGranules().concept_id(concept_id).temporal(start_date, end_date)
+            granules = query.get_all()
+        except IndexError:
+            granules = []
 
         return granules
 
