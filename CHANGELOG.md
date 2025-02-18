@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.4.2 (2025-02-18)
+
+### Bug Fixes
+
+- Handle list index error from earthaccess granule query
+  ([`c6ed1fc`](https://github.com/nasaharvest/glam-processing/commit/c6ed1fc9aa3edefd809f5f45144cae35fbc36d41))
+
+
 ## v0.4.1 (2025-02-17)
 
 ### Bug Fixes
