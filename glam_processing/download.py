@@ -42,6 +42,7 @@ from . import exceptions
 logging.basicConfig(
     format="%(asctime)s - %(message)s",
     datefmt="%d-%b-%y %H:%M:%S",
+    level=logging.INFO,
 )
 log = logging.getLogger(__name__)
 
@@ -277,8 +278,14 @@ class EarthDataDownloader(GlamDownloader):
                 composite["start_date"], composite["end_date"], out, vi=vi
             )
 
+            log.debug(f"downloaded files: {len(vi_files)}")
+
+            # filter files to ensure they belong in this composite
+            composite_files = [file for file in vi_files if composite["id"] in file]
+            log.debug(f"filtered files: {len(composite_files)}")
+
             vi_mosaic = self._create_mosaic_cog_from_tifs(
-                composite["start_date"], vi_files, out
+                composite["start_date"], composite_files, out
             )
             # Remove tiffs after mosaic creation.
             for file in vi_files:
