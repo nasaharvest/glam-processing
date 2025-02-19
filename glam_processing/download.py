@@ -185,24 +185,32 @@ class EarthDataDownloader(GlamDownloader):
         return granules
 
     def query_composites(self, start_date, end_date):
-        granules = self.query_granules(start_date, end_date)
         composites = []
-        for granule in tqdm(granules, desc="Getting available composite dates"):
-            composite_obj = {}
-            composite_obj["id"] = (
-                granule["meta"]["native-id"].split(".")[0]
-                + "."
-                + granule["meta"]["native-id"].split(".")[1]
+        try:
+            granules = self.query_granules(start_date, end_date)
+            assert (
+                len(granules) > 279
+            )  # ensure we have enough granules to create a composite
+            for granule in tqdm(granules, desc="Getting available composite dates"):
+                composite_obj = {}
+                composite_obj["id"] = (
+                    granule["meta"]["native-id"].split(".")[0]
+                    + "."
+                    + granule["meta"]["native-id"].split(".")[1]
+                )
+                composite_obj["start_date"] = granule["umm"]["TemporalExtent"][
+                    "RangeDateTime"
+                ]["BeginningDateTime"][:10]
+                composite_obj["end_date"] = granule["umm"]["TemporalExtent"][
+                    "RangeDateTime"
+                ]["EndingDateTime"][:10]
+                if composite_obj not in composites:
+                    composites.append(composite_obj)
+        except AssertionError:
+            log.info(
+                f"Insufficient granules found to create a composite for {self.dataset}."
             )
-            composite_obj["start_date"] = granule["umm"]["TemporalExtent"][
-                "RangeDateTime"
-            ]["BeginningDateTime"][:10]
-            composite_obj["end_date"] = granule["umm"]["TemporalExtent"][
-                "RangeDateTime"
-            ]["EndingDateTime"][:10]
-            if composite_obj not in composites:
-                composites.append(composite_obj)
-
+            return composites
         return composites
 
     def download_granules(self, start_date, end_date, out_dir):
