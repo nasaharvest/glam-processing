@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.4.3 (2025-02-19)
+
+### Bug Fixes
+
+- Additional granule filtering for composite creation
+  ([`a802ce3`](https://github.com/nasaharvest/glam-processing/commit/a802ce356b9dfcad0f2bad4a8fa0b46769e59332))
+
+- Assert granule length to avoid incomplete composites
+  ([`5d61e13`](https://github.com/nasaharvest/glam-processing/commit/5d61e1358d4ec7f568e366360d61f0b542d62dd3))
+
+
 ## v0.4.2 (2025-02-18)
 
 ### Bug Fixes
