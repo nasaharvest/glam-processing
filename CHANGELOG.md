@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.4.4 (2025-03-04)
+
+### Bug Fixes
+
+- Modify granule length assertion
+  ([`853ff14`](https://github.com/nasaharvest/glam-processing/commit/853ff14447493193a74dba5351d002151a0146c2))
+
+
 ## v0.4.3 (2025-02-19)
 
 ### Bug Fixes
