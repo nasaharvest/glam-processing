@@ -189,8 +189,9 @@ class EarthDataDownloader(GlamDownloader):
         try:
             granules = self.query_granules(start_date, end_date)
             assert (
-                len(granules) > 279
+                len(granules) > 275
             )  # ensure we have enough granules to create a composite
+            # todo: product specific granule check
             for granule in tqdm(granules, desc="Getting available composite dates"):
                 composite_obj = {}
                 composite_obj["id"] = (
