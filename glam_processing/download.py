@@ -2,6 +2,9 @@ import os
 import gzip
 import shutil
 import logging
+import re
+import csv
+from io import StringIO
 
 from datetime import datetime, timedelta
 import requests
@@ -26,6 +29,11 @@ import rioxarray
 import earthaccess
 from earthaccess import Auth, DataCollections, DataGranules
 
+try:
+    import boto3
+except ImportError:
+    boto3 = None
+
 
 from .earthdata import (
     create_ndvi_geotiff,
@@ -46,15 +54,15 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# add more CLMS dataset id's as needed
-CLMS_DATASETS = ["swi_12.5km_v3_10daily"]
+# CDSE datasets - Copernicus Data Space Ecosystem collections
+CDSE_DATASETS = ["swi_global_12.5km_10daily_v3", "swi_global_12.5km_10daily_v4"]
 
 UCSB_DATASETS = ["CHIRPS-2.0"]
 
 SERVIR_DATASETS = ["esi/4WK", "esi/12WK"]
 
 SUPPORTED_DATASETS = (
-    EARTHDATA_DATASETS + CLMS_DATASETS + UCSB_DATASETS + SERVIR_DATASETS
+    EARTHDATA_DATASETS + CDSE_DATASETS + UCSB_DATASETS + SERVIR_DATASETS
 )
 
 SUPPORTED_INDICIES = ["NDVI", "NDWI"]
@@ -327,87 +335,255 @@ class EarthDataDownloader(GlamDownloader):
         return output
 
 
-class CLMSDownloader(GlamDownloader):
-    def __init__(self, dataset):
+class CDSEDownloader(GlamDownloader):
+    """
+    Downloader for Copernicus Data Space Ecosystem (CDSE) datasets.
+    Uses official CDSE S3 endpoint and boto3 resource API.
+    
+    For SWI (Soil Water Index) data:
+    - swi_global_12.5km_10daily_v3: CLMS/bio-geophysical/soil_water_index/swi_global_12.5km_10daily_v3
+    - swi_global_12.5km_10daily_v4: CLMS/bio-geophysical/soil_water_index/swi_global_12.5km_10daily_v4
+    
+    SWI T-values (depth levels in cm): 001, 005, 010, 015, 020, 040, 060, 100
+    Default: T=010 (10cm depth)
+    
+    Requires CDSE S3 credentials to be set as environment variables:
+    - CDSE_S3_ACCESS_KEY: S3 access key
+    - CDSE_S3_SECRET_KEY: S3 secret key
+    """
+    
+    def __init__(self, dataset, swi_t_value="010"):
         super().__init__(dataset)
-
-        self.manifest = f"https://globalland.vito.be/download/manifest/{self.dataset}_netcdf/manifest_clms_global_{self.dataset}_netcdf_latest.txt"
-
+        
+        if boto3 is None:
+            raise ImportError(
+                "boto3 is required for CDSE S3 downloads. "
+                "Install it with: pip install boto3"
+            )
+        
+        # SWI T-value (depth level) to download
+        valid_t_values = ["001", "005", "010", "015", "020", "040", "060", "100"]
+        if swi_t_value not in valid_t_values:
+            raise ValueError(
+                f"Invalid SWI T-value '{swi_t_value}'. "
+                f"Must be one of: {', '.join(valid_t_values)}"
+            )
+        self.swi_t_value = swi_t_value
+        
+        # S3 configuration
+        self.s3_bucket = "eodata"  # CDSE bucket
+        self.s3_resource = self._init_s3_resource()
+        self.bucket = self.s3_resource.Bucket(self.s3_bucket)
+        
+        # Dataset-specific S3 path prefixes
+        self.s3_prefixes = {
+            "swi_global_12.5km_10daily_v3": "CLMS/bio-geophysical/soil_water_index/swi_global_12.5km_10daily_v3",
+            "swi_global_12.5km_10daily_v4": "CLMS/bio-geophysical/soil_water_index/swi_global_12.5km_10daily_v4"
+        }
+        
+        if dataset not in self.s3_prefixes:
+            raise ValueError(
+                f"Dataset '{dataset}' not configured for CDSE access. "
+                f"Available datasets: {list(self.s3_prefixes.keys())}"
+            )
+    
+    def _init_s3_resource(self):
+        """Initialize S3 client and resource with CDSE credentials using official endpoint."""
+        access_key = os.environ.get("CDSE_S3_ACCESS_KEY")
+        secret_key = os.environ.get("CDSE_S3_SECRET_KEY")
+        
+        if not access_key or not secret_key:
+            log.error(
+                "CDSE S3 credentials not found in environment variables. "
+                "Please set CDSE_S3_ACCESS_KEY and CDSE_S3_SECRET_KEY."
+            )
+            raise ValueError(
+                "CDSE S3 credentials required. "
+                "Set environment variables: CDSE_S3_ACCESS_KEY and CDSE_S3_SECRET_KEY"
+            )
+        
+        # Create session with explicit credentials
+        session = boto3.session.Session(
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key
+        )
+        # Client for pagination
+        self.s3_client = session.client(
+            's3',
+            endpoint_url='https://eodata.dataspace.copernicus.eu',
+            region_name='default'
+        )
+        # Resource for bucket operations
+        s3_resource = session.resource(
+            's3',
+            endpoint_url='https://eodata.dataspace.copernicus.eu',
+            region_name='default'
+        )
+        return s3_resource
+    
     def query_composites(self, start_date, end_date):
-
-        r = requests.get(self.manifest, verify=False)
-        download_list = r.text.split("\n")
-
+        """
+        Query available composites in the date range by filtering S3 objects.
+        Queries year/month prefixes to efficiently find files without listing all directories.
+        
+        Args:
+            start_date (str): Start date in format 'YYYY-MM-DD'
+            end_date (str): End date in format 'YYYY-MM-DD'
+        
+        Returns:
+            list: List of composite metadata dictionaries with 'date' and 's3_key' keys
+        """
+        prefix = self.s3_prefixes.get(self.dataset)
+        
+        if not prefix:
+            log.error(f"No S3 prefix configured for dataset {self.dataset}")
+            return []
+        
+        log.info(f"Querying {self.dataset} for date range {start_date} to {end_date}")
+        
         composites = []
-        for url in tqdm(download_list, desc=f"Querying available {self.dataset} files"):
-            if url.endswith(".nc"):
-                datestring = url.split("/")[-2]
-
-                year = datestring[:4]
-                month = datestring[4:6]
-                day = datestring[6:8]
-                date = datetime(int(year), int(month), int(day))
-                start = datetime.strptime(start_date, "%Y-%m-%d")
-                end = datetime.strptime(end_date, "%Y-%m-%d")
-
-                if start <= date <= end:
-                    composites.append({"date": date.strftime("%Y-%m-%d"), "url": url})
-
-        return composites
-
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        
+        # Generate year/month prefixes to query
+        year_month_set = set()
+        current = start_dt
+        while current <= end_dt:
+            year_month_set.add(current.strftime("%Y/%m"))
+            # Move to next month
+            if current.month == 12:
+                current = datetime(current.year + 1, 1, 1)
+            else:
+                current = datetime(current.year, current.month + 1, 1)
+        
+        try:
+            seen_dates = set()  # Track unique dates to avoid duplicates
+            
+            for year_month in sorted(year_month_set):
+                # Query with year/month prefix to get actual files, not just directory markers
+                query_prefix = f"{prefix}/{year_month}/"
+                log.info(f"Listing S3 objects with prefix: {query_prefix}")
+                
+                paginator = self.s3_client.get_paginator('list_objects_v2')
+                pages = paginator.paginate(Bucket=self.s3_bucket, Prefix=query_prefix)
+                
+                for page in pages:
+                    if 'Contents' not in page:
+                        continue
+                    
+                    for obj in page['Contents']:
+                        try:
+                            s3_key = obj['Key']
+                            filename = os.path.basename(s3_key)
+                            
+                            if not filename or filename.endswith('/'):
+                                # Skip directory entries
+                                continue
+                            
+                            # Filter for SWI T-value (e.g., SWI010 for 10cm depth)
+                            swi_pattern = f"SWI{self.swi_t_value}"
+                            if swi_pattern not in filename:
+                                continue
+                            
+                            # Extract date from filename (YYYYMMDD pattern)
+                            date_match = re.search(r"(\d{8})", filename)
+                            if date_match:
+                                date_str = date_match.group(1)
+                                try:
+                                    file_date = datetime.strptime(date_str, "%Y%m%d")
+                                    date_key = file_date.strftime("%Y-%m-%d")
+                                    
+                                    if start_dt <= file_date <= end_dt and date_key not in seen_dates:
+                                        composites.append({
+                                            "date": date_key,
+                                            "s3_key": s3_key,
+                                            "filename": filename
+                                        })
+                                        seen_dates.add(date_key)
+                                except ValueError:
+                                    continue
+                        except Exception as e:
+                            log.debug(f"Error processing S3 object: {e}")
+                            continue
+            
+            # Sort by date
+            composites.sort(key=lambda x: x["date"])
+            log.info(f"Found {len(composites)} available composites in date range")
+            return composites
+        
+        except Exception as e:
+            log.error(f"Error querying S3 objects: {e}")
+            return []
+    
     def download_composites(self, start_date, end_date, out_dir):
-
+        """
+        Download cloud-optimized GeoTIFF composites from CDSE S3 and validate them.
+        
+        Args:
+            start_date (str): Start date in format 'YYYY-MM-DD'
+            end_date (str): End date in format 'YYYY-MM-DD'
+            out_dir (str): Output directory path
+        
+        Returns:
+            list: List of paths to downloaded and validated GeoTIFF files
+        """
+        out = os.path.abspath(out_dir)
+        os.makedirs(out, exist_ok=True)
+        
         composites = self.query_composites(start_date, end_date)
-
+        
+        if not composites:
+            log.warning(
+                f"No composites found for date range {start_date} to {end_date}. "
+                "Please check your CDSE credentials and internet connectivity."
+            )
+            return []
+        
         completed = []
-
+        
         for composite in tqdm(
             composites, desc=f"Downloading {self.dataset} composites"
         ):
             date = composite.get("date")
-            url = composite.get("url")
-
-            r = requests.get(url, verify=False)
-
-            out = os.path.join(out_dir, f"{self.dataset}.{date}.tif")
-
-            # Temporary NetCDF file; later to be converted to tiff
-            file_nc = out.replace("tif", "nc")
-
-            # write output .nc file
-            with open(file_nc, "wb") as fd:  # write data in chunks
-                for chunk in r.iter_content(chunk_size=1024 * 1024):
-                    fd.write(chunk)
-
-            # checksum
-            # size of downloaded file (bytes)
-            observed_size = int(os.stat(file_nc).st_size)
-            # size anticipated from header (bytes)
-            expected_size = int(r.headers["Content-Length"])
-
-            # if checksum is failed, log and return empty
-            if int(observed_size) != int(expected_size):
-                w = f"\nExpected file size:\t{expected_size} bytes\nObserved file size:\t{observed_size} bytes"
-                log.warning(w)
-                os.remove(file_nc)
-                return ()
-
-            # Use rioxarray to remove time dimension and create intermediate geotiff
-            xds = rioxarray.open_rasterio(os.path.abspath(file_nc), decode_times=False)
-            new_ds = xds.squeeze()
-
-            # Select SWI layer for T-Value of 10
-            temp = os.path.join(out_dir, f"{self.dataset}.{date}.temp.tif")
-            new_ds["SWI_010"].rio.to_raster(temp)
-
-            optimized = self._cloud_optimize(temp, out, nodata=False)
-
-            if optimized:
-                os.remove(file_nc)
-                os.remove(temp)
-                completed.append(out)
-
+            s3_key = composite.get("s3_key")
+            filename = composite.get("filename")
+            
+            try:
+                # Rename file using convention: {product_id}.{date}.tif
+                new_filename = f"{self.dataset}.{date}.tif"
+                file_path = os.path.join(out_dir, new_filename)
+                
+                log.info(f"Downloading {s3_key} to {file_path}")
+                self.bucket.download_file(s3_key, file_path)
+                
+                # Verify file exists and has content
+                if not os.path.isfile(file_path) or os.path.getsize(file_path) == 0:
+                    log.error(f"Downloaded file is empty or missing: {file_path}")
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                    continue
+                
+                # Validate COG
+                try:
+                    is_valid = cog_validate(file_path)
+                    if is_valid:
+                        completed.append(file_path)
+                        log.info(f"Successfully validated COG for {date}: {new_filename}")
+                    else:
+                        log.error(f"COG validation failed for {date}: {new_filename}")
+                        os.remove(file_path)
+                
+                except Exception as e:
+                    log.error(f"Error validating COG for {date}: {e}")
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+            
+            except Exception as e:
+                log.error(f"Error downloading composite for {date}: {e}")
+                continue
+        
         return completed
+
 
 
 class UCSBDownloader(GlamDownloader):
@@ -639,9 +815,12 @@ class SERVIRDownloader(GlamDownloader):
 
 
 class Downloader:
-    def __init__(self, dataset):
+    def __init__(self, dataset, swi_t_value="010"):
         # add more short names as needed
-        self.short_names = {"chirps": "CHIRPS-2.0", "swi": "swi_12.5km_v3_10daily"}
+        self.short_names = {
+            "chirps": "CHIRPS-2.0",
+            "swi": "swi_global_12.5km_10daily_v4"  # Default to v4, use explicit name for v3
+        }
         dataset = self.short_names.get(dataset, dataset)
         self.dataset = dataset
 
@@ -649,8 +828,8 @@ class Downloader:
             self.instance = EarthDataDownloader(dataset)
         elif dataset in UCSB_DATASETS:
             self.instance = UCSBDownloader(dataset)
-        elif dataset in CLMS_DATASETS:
-            self.instance = CLMSDownloader(dataset)
+        elif dataset in CDSE_DATASETS:
+            self.instance = CDSEDownloader(dataset, swi_t_value=swi_t_value)
         elif dataset in SERVIR_DATASETS:
             self.instance = SERVIRDownloader(dataset)
         else:
